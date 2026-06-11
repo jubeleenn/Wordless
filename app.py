@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, colorchooser, ttk
 from pathlib import Path
 import html
 import re
@@ -8,24 +8,52 @@ import subprocess
 import zipfile
 import xml.etree.ElementTree as ET
 
+# --- 1. DICCIONARIO DE TEMAS PREDETERMINADOS ---
+temas = {
+    "Clásico": {"fondo": "#fdfdfc", "texto": "#2b2b2b", "acento": "#1e6292", "fuente": "Merriweather"},
+    "Modo Oscuro": {"fondo": "#121212", "texto": "#e0e0e0", "acento": "#ee8001", "fuente": "Inter"},
+    "Moderno": {"fondo": "#f0f4f8", "texto": "#334155", "acento": "#10b981", "fuente": "Roboto"}
+}
+
+# --- 2. FUNCIONES DE LÓGICA VISUAL ---
+def aplicar_tema(nombre_tema):
+    tema = temas[nombre_tema]
+    btn_color_fondo.config(bg=tema["fondo"])
+    btn_color_texto.config(bg=tema["texto"])
+    btn_color_acento.config(bg=tema["acento"])
+    combo_fuentes.set(tema["fuente"])
+    lbl_estado.config(text=f"Tema '{nombre_tema}' aplicado al panel.", fg="green")
+
+def elegir_color(boton):
+    color_elegido = colorchooser.askcolor(title="Elegí un color")[1]
+    if color_elegido:
+        boton.config(bg=color_elegido)
+        lbl_estado.config(text="Color manual aplicado.", fg="blue")
+
+# --- 3. LÓGICA DE EXTRACCIÓN Y GENERACIÓN (EL MOTOR) ---
 def procesar_word():
-    # --- 1. ABRIR VENTANA PARA ELEGIR EL ARCHIVO ---
+    # 1. Leer las variables de diseño del Panel
+    fuente_elegida = combo_fuentes.get()
+    color_fondo = btn_color_fondo.cget("bg")
+    color_texto = btn_color_texto.cget("bg")
+    color_acento = btn_color_acento.cget("bg")
+
+    # 2. Pedir el archivo al usuario
     file_path = filedialog.askopenfilename(
         title="Selecciona un archivo Word de la Revista CICLOS",
         filetypes=[("Documentos de Word", "*.docx")]
     )
 
     if not file_path:
-        return # Si cierra la ventana sin elegir nada, no hace nada
+        return
 
-    # Cambiamos el texto para avisar que está trabajando
     lbl_estado.config(text="Procesando documento... aguarde.", fg="#ee8001")
     root.update()
 
     try:
         DOCX = Path(file_path)
 
-        # --- 2. CREAR CARPETAS AUTOMÁTICAMENTE ---
+        # Crear carpetas
         OUT = DOCX.parent / DOCX.stem
         IMG_DIR = OUT / "public" / "img"
         ARTICLE_IMG_DIR = IMG_DIR / "article"
@@ -33,7 +61,7 @@ def procesar_word():
         OUT.mkdir(parents=True, exist_ok=True)
         ARTICLE_IMG_DIR.mkdir(parents=True, exist_ok=True)
 
-        # --- 3. EXTRACCIÓN DEL WORD ---
+        # Extracción del Word
         W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
         R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
         A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
@@ -171,10 +199,8 @@ def procesar_word():
 
         def child_kind(child): return child.tag.split("}", 1)[-1]
 
-        # --- 4. EXTRACCIÓN DINÁMICA ---
         title_html, english_title, author_html, affiliation = "", "", "", ""
         abstract_es, keywords_es, abstract_en, keywords_en = "", "", "", ""
-
         article_parts = []
         references_open = False
         in_body = False
@@ -251,150 +277,126 @@ def procesar_word():
         title_plain = re.sub(r'<[^>]+>', '', title_html).replace('"', '&quot;')
         author_plain = re.sub(r'<[^>]+>', '', author_html).replace('"', '&quot;')
 
-        # --- 5. PLANTILLAS ---
+        # --- 4. INYECCIÓN DINÁMICA DE LA PLANTILLA ---
+        # Formateamos la fuente para la URL de Google Fonts (ej. "Playfair Display" -> "Playfair+Display")
+        fuente_url = fuente_elegida.replace(" ", "+")
+
         html_doc = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Language" content="ES">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CICLOS | {title_plain[:50]}...</title>
-<meta name="description" content="CICLOS en la historia, la economía y la sociedad. Espacio académico para la publicación de trabajos de investigación.">
-<meta name="robots" content="index,follow">
-<meta name="author" content="{author_plain}">
-<meta name="DC.identifier" content="ISSN 0327-4063">
-<meta name="DC.creator" content="{author_plain}">
-<meta name="DC.publisher" content="CIHESRI-IDEHESI, Facultad de Ciencias Económicas, Universidad de Buenos Aires">
-<meta name="DC.Title" content="{title_plain}">
-<meta name="DC.Rights" content="Creative commons Attribution-NonCommercial-ShareAlike 4.0 Internacional">
-<meta name="DC.Language" content="es">
+<title>Artículo Dinámico | {title_plain[:40]}...</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;700;800&family=Merriweather:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.9.1/font/bootstrap-icons.css">
-<link rel="icon" href="public/img/LogoCiclos.png" type="image/png">
+<link href="https://fonts.googleapis.com/css2?family={fuente_url}:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="site-header">
-<div class="header-inner">
-<div class="logo-area">
-<a href="#"><img src="public/img/LogoCiclos.png" alt="Revista CICLOS" class="header-logo"></a>
-</div>
-<nav class="top-nav">
-<a href="#" class="active-link">Actual</a>
-<a href="https://ojs.economicas.uba.ar/revistaCICLOS/issue/archive">Archivos</a>
-<div class="dropdown">
-<a href="#" class="dropdown-toggle">Acerca de <i class="bi bi-caret-down-fill"></i></a>
-<div class="dropdown-menu">
-<a href="https://ojs.economicas.uba.ar/revistaCICLOS/about">Sobre la revista</a>
-</div>
-</div>
-</nav>
-</div>
-</header>
 <main class="article-wrapper">
-<div class="metadata-bar">
-<span class="badge">Artículos</span>
-<span class="badge badge-outline">Vol. XXXII, Nro. 65, 2025</span>
-<span class="sep">|</span>
-<a href="https://portal.issn.org/resource/ISSN/1851-3735" class="doi-link" target="_blank">eISSN 1851-3735</a>
-<span class="sep">|</span>
-<span class="doi-link">ISSN 0327-4063</span>
-<span class="sep">|</span>
-<a href="https://doi.org/10.1234/ciclos.v32i65.12345" class="doi-link" target="_blank">DOI: 10.1234/ciclos.v32i65.12345</a>
-</div>
 <header class="article-heading">
 <h1 class="title">{title_html}</h1>
 <h2 class="subtitle">{english_title}</h2>
 <div class="author-block">
-<p class="author-name">{author_html} <a href="https://orcid.org/0000-0000-0000-0000" target="_blank" style="color: #a6ce39; margin-left: 6px;"><i class="bi bi-person-badge"></i></a></p>
+<p class="author-name">{author_html}</p>
 <p class="author-affiliation">{affiliation}</p>
 </div>
 </header>
-<section class="abstract-box">
-<div class="abstract-lang">
-<h3>Resumen</h3><p>{abstract_es}</p><p class="keywords"><strong>Palabras clave:</strong> {keywords_es}</p>
-</div>
-<hr class="abstract-divider">
-<div class="abstract-lang">
-<h3>Abstract</h3><p>{abstract_en}</p><p class="keywords"><strong>Key words:</strong> {keywords_en}</p>
-</div>
-</section>
 <article class="article-content">{article_html}</article>
 </main>
-<footer class="site-footer">
-<div class="footer-inner">
-<div class="footer-col">
-<h4>Revista CICLOS</h4>
-<p>Av. Córdoba 2122, CABA</p>
-</div>
-</div>
-</footer>
 </body>
 </html>
 """
 
-        css_doc = """:root { --blue-primary: #1e6292; --blue-dark: #012662; --blue-light: #eef5fb; --orange-accent: #ee8001; --text-main: #2b2b2b; --text-muted: #5a6a7a; --bg-page: #fdfdfc; --white: #ffffff; --border-color: #cbd5e1; --font-heading: 'Playfair Display', Georgia, serif; --font-ui: "Inter", sans-serif; --font-body: "Merriweather", serif; }
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: var(--font-body); background-color: var(--bg-page); color: var(--text-main); line-height: 1.85; font-size: 1.08rem; }
-a { color: var(--blue-primary); text-decoration: none; }
-.site-header { background-color: var(--blue-primary); border-top: 4px solid var(--orange-accent); padding: 0.8rem 0; }
-.header-inner { max-width: 1150px; margin: 0 auto; padding: 0 2rem; display: flex; justify-content: space-between; align-items: center; }
-.header-logo { height: 75px; width: auto; display: block; }
-.top-nav { display: flex; gap: 1.8rem; align-items: center; }
-.top-nav a { color: #e2e8f0; font-family: var(--font-ui); font-size: 0.85rem; font-weight: 600; text-transform: uppercase; }
-.article-wrapper { max-width: 1000px; margin: 4rem auto; padding: 0 2rem; }
-.metadata-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 0.8rem; margin-bottom: 2rem; font-family: var(--font-ui); font-size: 0.75rem; font-weight: 700; }
-.badge { background-color: var(--blue-primary); color: var(--white); padding: 0.3rem 0.8rem; border-radius: 4px; text-transform: uppercase; }
-.badge-outline { background-color: transparent; color: var(--blue-primary); border: 1px solid var(--blue-primary); }
-.title { font-family: var(--font-heading); font-size: 2.55rem; font-weight: 700; color: var(--blue-dark); line-height: 1.25; margin-bottom: 1.2rem; }
-.subtitle { font-family: var(--font-heading); font-size: 1.22rem; color: var(--text-muted); font-style: italic; margin-bottom: 2rem; }
-.author-block { border-left: 4px solid var(--orange-accent); padding-left: 1rem; }
-.author-name { font-family: var(--font-ui); font-size: 1.05rem; font-weight: 700; color: var(--blue-primary); }
-.abstract-box { background-color: var(--blue-light); padding: 2.5rem; border-radius: 8px; margin: 3.5rem 0; border: 1px solid #d0e1f0; }
-.abstract-lang h3 { font-family: var(--font-ui); color: var(--blue-dark); text-transform: uppercase; font-size: 0.85rem; margin-bottom: 0.8rem; font-weight: 700; }
-.article-content h3 { font-family: var(--font-heading); font-size: 1.7rem; color: var(--blue-dark); margin: 3.6rem 0 1.2rem; font-weight: 700; }
-.article-content p { margin-bottom: 1.55rem; text-align: justify; }
-.article-figure { margin: 2.6rem 0; padding: 1.5rem; background-color: var(--white); border: 1px solid var(--border-color); border-radius: 8px; }
-.figure-media img { display: block; max-width: 100%; height: auto; }
-.references { margin-top: 3.5rem; }
-.references .reference-item { font-size: 0.92rem; line-height: 1.65; margin-bottom: 0.85rem; }
-.footnotes { border-top: 1px solid var(--border-color); margin-top: 3.5rem; padding-top: 1rem; }
-.footnotes p { font-family: var(--font-ui); font-size: 0.82rem; margin-bottom: 0; }
-.site-footer { background-color: var(--blue-primary); color: #cbd5e1; padding: 3rem 0; font-family: var(--font-ui); font-size: 0.8rem; margin-top: 6rem; border-top: 5px solid var(--blue-dark); }
-.footer-inner { max-width: 1150px; margin: 0 auto; padding: 0 2rem; }
+        # Acá sucede la magia: inyectamos los colores del panel al CSS
+        css_doc = f"""
+:root {{
+    --bg-page: {color_fondo};
+    --text-main: {color_texto};
+    --blue-primary: {color_acento};
+    --orange-accent: {color_acento};
+    --blue-dark: {color_texto};
+    --white: {color_fondo};
+    --border-color: {color_acento};
+    --font-heading: '{fuente_elegida}', serif;
+    --font-ui: "Arial", sans-serif;
+    --font-body: '{fuente_elegida}', sans-serif;
+}}
+
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ 
+    font-family: var(--font-body); 
+    background-color: var(--bg-page); 
+    color: var(--text-main); 
+    line-height: 1.85; 
+    font-size: 1.1rem; 
+    padding: 2rem;
+}}
+a {{ color: var(--blue-primary); text-decoration: none; }}
+.article-wrapper {{ max-width: 1000px; margin: 0 auto; }}
+.title {{ font-family: var(--font-heading); font-size: 2.5rem; font-weight: 700; color: var(--blue-primary); margin-bottom: 1rem; }}
+.subtitle {{ font-family: var(--font-heading); font-size: 1.3rem; font-style: italic; opacity: 0.8; margin-bottom: 2rem; }}
+.author-block {{ border-left: 4px solid var(--orange-accent); padding-left: 1rem; margin-bottom: 3rem; }}
+.author-name {{ font-weight: 700; color: var(--blue-primary); }}
+.article-content h3 {{ font-family: var(--font-heading); font-size: 1.7rem; color: var(--blue-primary); margin: 3rem 0 1rem; font-weight: 700; }}
+.article-content p {{ margin-bottom: 1.5rem; text-align: justify; }}
+.article-figure {{ margin: 2rem 0; padding: 1rem; border: 1px solid var(--border-color); }}
+.figure-media img {{ display: block; max-width: 100%; height: auto; }}
+.academic-quote {{ font-size: 1.2rem; font-style: italic; color: var(--text-main); margin: 2rem 0; padding: 1.5rem; border-left: 4px solid var(--orange-accent); }}
 """
 
         (OUT / "index.html").write_text(html_doc, encoding="utf-8")
         (OUT / "style.css").write_text(css_doc, encoding="utf-8")
         
-        lbl_estado.config(text="¡Conversión finalizada con éxito!", fg="green")
-        messagebox.showinfo("¡Éxito!", f"¡Listo! Todo se extrajo y guardó en:\n{OUT}")
+        lbl_estado.config(text="¡Conversión dinámica finalizada!", fg="green")
+        messagebox.showinfo("¡Éxito!", f"¡Listo! El artículo se adaptó al diseño y se guardó en:\n{OUT}")
 
     except Exception as e:
         lbl_estado.config(text="Error durante la conversión.", fg="red")
         messagebox.showerror("Error", f"Ocurrió un problema: {e}")
 
-# --- INTERFAZ GRÁFICA PRINCIPAL ---
+# --- 5. INTERFAZ GRÁFICA PRINCIPAL ---
 root = tk.Tk()
-root.title("Wordless | Revista CICLOS")
-root.geometry("450x250")
+root.title("Wordless | Generador Dinámico")
+root.geometry("450x480")
 root.configure(bg="#fdfdfc")
 
-# Título de la app
-lbl_titulo = tk.Label(root, text="Procesador de Artículos", font=("Arial", 16, "bold"), bg="#fdfdfc", fg="#012662")
-lbl_titulo.pack(pady=(20, 5))
+tk.Label(root, text="Personalizar Diseño", font=("Arial", 16, "bold"), bg="#fdfdfc", fg="#012662").pack(pady=(15, 5))
 
-lbl_sub = tk.Label(root, text="De .docx a Web Estática", font=("Arial", 10), bg="#fdfdfc", fg="#5a6a7a")
-lbl_sub.pack(pady=(0, 20))
+# --- SECCIÓN: Temas Rápidos ---
+frame_temas = tk.LabelFrame(root, text="Temas Rápidos", bg="#fdfdfc", padx=10, pady=10)
+frame_temas.pack(fill="x", padx=20, pady=10)
 
-# Botón principal
-btn_procesar = tk.Button(root, text="📂 Seleccionar Word y Convertir", font=("Arial", 12, "bold"), bg="#1e6292", fg="white", activebackground="#ee8001", activeforeground="white", padx=10, pady=5, cursor="hand2", command=procesar_word)
-btn_procesar.pack(pady=10)
+tk.Button(frame_temas, text="Clásico", command=lambda: aplicar_tema("Clásico")).pack(side="left", expand=True, padx=5)
+tk.Button(frame_temas, text="Oscuro", command=lambda: aplicar_tema("Modo Oscuro")).pack(side="left", expand=True, padx=5)
+tk.Button(frame_temas, text="Moderno", command=lambda: aplicar_tema("Moderno")).pack(side="left", expand=True, padx=5)
 
-# Etiqueta de estado (arranca vacía)
+# --- SECCIÓN: Ajustes Manuales ---
+frame_manual = tk.LabelFrame(root, text="Ajustes Manuales", bg="#fdfdfc", padx=10, pady=10)
+frame_manual.pack(fill="x", padx=20, pady=10)
+
+tk.Label(frame_manual, text="Tipografía:", bg="#fdfdfc").grid(row=0, column=0, sticky="w", pady=5)
+combo_fuentes = ttk.Combobox(frame_manual, values=["Merriweather", "Inter", "Roboto", "Playfair Display"], state="readonly")
+combo_fuentes.set("Merriweather")
+combo_fuentes.grid(row=0, column=1, pady=5, padx=10, sticky="ew")
+
+tk.Label(frame_manual, text="Color de Fondo:", bg="#fdfdfc").grid(row=1, column=0, sticky="w", pady=5)
+btn_color_fondo = tk.Button(frame_manual, bg="#fdfdfc", width=15, command=lambda: elegir_color(btn_color_fondo))
+btn_color_fondo.grid(row=1, column=1, pady=5, padx=10)
+
+tk.Label(frame_manual, text="Color de Texto:", bg="#fdfdfc").grid(row=2, column=0, sticky="w", pady=5)
+btn_color_texto = tk.Button(frame_manual, bg="#2b2b2b", width=15, command=lambda: elegir_color(btn_color_texto))
+btn_color_texto.grid(row=2, column=1, pady=5, padx=10)
+
+tk.Label(frame_manual, text="Color de Acento:", bg="#fdfdfc").grid(row=3, column=0, sticky="w", pady=5)
+btn_color_acento = tk.Button(frame_manual, bg="#1e6292", width=15, command=lambda: elegir_color(btn_color_acento))
+btn_color_acento.grid(row=3, column=1, pady=5, padx=10)
+
+# --- BOTÓN FINAL ---
 lbl_estado = tk.Label(root, text="", font=("Arial", 10, "italic"), bg="#fdfdfc")
-lbl_estado.pack(pady=10)
+lbl_estado.pack(pady=5)
+
+btn_procesar = tk.Button(root, text="📂 Seleccionar Word y Generar", font=("Arial", 12, "bold"), bg="#1e6292", fg="white", pady=5, cursor="hand2", command=procesar_word)
+btn_procesar.pack(fill="x", padx=20, pady=10)
 
 root.mainloop()
